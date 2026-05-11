@@ -1,32 +1,33 @@
 :root {
-  /* Colors */
-  --bg-color: #0f172a;
-  --surface-color: #1e293b;
-  --surface-hover: #334155;
-  --surface-border: #334155;
+  /* Ultra-modern dark theme */
+  --bg-color: #0b0f19;
+  --surface-color: rgba(30, 41, 59, 0.4);
+  --surface-hover: rgba(51, 65, 85, 0.8);
+  --surface-border: rgba(255, 255, 255, 0.1);
+  --surface-active: rgba(59, 130, 246, 0.15);
   
   --primary: #3b82f6;
-  --primary-hover: #2563eb;
-  --primary-glow: rgba(59, 130, 246, 0.5);
+  --primary-hover: #60a5fa;
+  --primary-glow: rgba(59, 130, 246, 0.6);
   
   --secondary: #10b981;
-  --danger: #ef4444;
-  --danger-hover: #dc2626;
-
-  --text-primary: #f8fafc;
+  --secondary-glow: rgba(16, 185, 129, 0.4);
+  
+  --danger: #f43f5e;
+  
+  --text-primary: #ffffff;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
 
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-glow: 0 0 20px -5px var(--primary-glow);
+  --shadow-sm: 0 2px 4px rgb(0 0 0 / 0.1);
+  --shadow-md: 0 8px 16px -4px rgb(0 0 0 / 0.2);
+  --shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.3), 0 8px 10px -6px rgb(0 0 0 / 0.3);
   
-  --radius-md: 0.5rem;
-  --radius-lg: 1rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.5rem;
   --radius-full: 9999px;
 
-  /* Fonts */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
@@ -40,43 +41,79 @@ body {
   font-family: var(--font-sans);
   background-color: var(--bg-color);
   color: var(--text-primary);
-  line-height: 1.5;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Thematic Background with Ken Burns Effect */
+body::before {
+  content: '';
+  position: fixed;
+  top: -10%; left: -10%; width: 120%; height: 120%;
+  background: url('/bg.png') center/cover no-repeat;
+  z-index: -2;
+  opacity: 0.15; /* subtle so it doesn't overpower the UI */
+  animation: kenBurns 30s ease-in-out infinite alternate;
+  filter: saturate(1.2) contrast(1.1);
+}
+
+/* Aurora Light Overlay over the image */
+body::after {
+  content: '';
+  position: fixed;
+  top: -200px; left: -200px; width: 600px; height: 600px;
+  border-radius: 50%;
+  filter: blur(120px);
+  z-index: -1;
+  opacity: 0.4;
+  background: radial-gradient(circle, rgba(59,130,246,0.3) 0%, transparent 70%);
+  animation: pulse 10s alternate infinite;
+}
+
+@keyframes kenBurns {
+  0% { transform: scale(1) translate(0, 0); }
+  100% { transform: scale(1.1) translate(-2%, -1%); }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.2; }
+  100% { transform: scale(1.1); opacity: 0.5; }
 }
 
 #app {
   width: 100%;
-  flex: 1;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
 /* Glass panel */
 .glass-panel {
-  background: rgba(30, 41, 59, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--surface-color);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--surface-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 /* Typography */
 h1, h2, h3, h4 {
-  font-weight: 600;
-  letter-spacing: -0.025em;
+  font-weight: 700;
+  letter-spacing: -0.03em;
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-color);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--surface-hover);
@@ -91,17 +128,24 @@ h1, h2, h3, h4 {
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  background-image: linear-gradient(to right, #3b82f6, #8b5cf6);
+  background-image: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
 }
 
 /* Transitions */
 .fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
+.fade-leave-active,
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-  transform: translateY(10px);
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(20px);
 }
