@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Calculadora de Reconstituição e Dose</title>
+    <meta name="description" content="Calculadora premium para reconstituição e dosagem de peptídeos e medicamentos.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Calculadora de Dose</h1>
+            <p>Reconstituição & Dosagem</p>
+        </header>
+
+        <main>
+            <!-- Card: Vial Contents -->
+            <section class="card" id="vial-card">
+                <div class="card-header">
+                    <h2>Conteúdo do Frasco (mg)</h2>
+                </div>
+                <div class="card-body">
+                    <div class="button-grid" id="vial-buttons">
+                        <button data-value="5">5mg</button>
+                        <button data-value="10">10mg</button>
+                        <button data-value="15">15mg</button>
+                        <button data-value="20">20mg</button>
+                        <button data-value="30">30mg</button>
+                        <button data-value="60">60mg</button>
+                    </div>
+                    <div class="custom-input-group">
+                        <label for="custom-vial">Personalizado:</label>
+                        <input type="number" id="custom-vial" placeholder="Ex: 50" min="0" step="any">
+                        <span>mg</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Card: Amount of Diluent -->
+            <section class="card" id="diluent-card">
+                <div class="card-header">
+                    <h2>Quantidade de Diluente (mL)</h2>
+                    <span class="subtitle">(Água Bacteriostática/NaCl)</span>
+                </div>
+                <div class="card-body">
+                    <div class="button-grid" id="diluent-buttons">
+                        <button data-value="0.5">0.5mL</button>
+                        <button data-value="1">1mL</button>
+                        <button data-value="2">2mL</button>
+                        <button data-value="2.4">2.4mL</button>
+                        <button data-value="2.5">2.5mL</button>
+                        <button data-value="4">4mL</button>
+                    </div>
+                    <div class="custom-input-group">
+                        <label for="custom-diluent">Personalizado:</label>
+                        <input type="number" id="custom-diluent" placeholder="Ex: 4" min="0" step="any">
+                        <span>mL</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Card: Syringe Size -->
+            <section class="card" id="syringe-card">
+                <div class="card-header">
+                    <h2>Tamanho da Seringa (U-100)</h2>
+                </div>
+                <div class="card-body">
+                    <div class="button-grid syringe-grid" id="syringe-buttons">
+                        <button data-value="0.3">
+                            <span class="ml">0.3mL</span>
+                            <span class="units">(30 Unidades)</span>
+                        </button>
+                        <button data-value="0.5">
+                            <span class="ml">0.5mL</span>
+                            <span class="units">(50 Unidades)</span>
+                        </button>
+                        <button data-value="1">
+                            <span class="ml">1mL</span>
+                            <span class="units">(100 Unidades)</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Card: Dose Required -->
+            <section class="card dose-card" id="dose-card">
+                <div class="card-header">
+                    <h2>Dose Desejada (mg)</h2>
+                </div>
+                <div class="card-body">
+                    <div class="button-grid compact" id="dose-buttons">
+                        <button data-value="0.25">0.25mg</button>
+                        <button data-value="0.5">0.5mg</button>
+                        <button data-value="1">1mg</button>
+                        <button data-value="1.7">1.7mg</button>
+                        <button data-value="2">2mg</button>
+                        <button data-value="2.4">2.4mg</button>
+                        <button data-value="2.5">2.5mg</button>
+                        <button data-value="4">4mg</button>
+                        <button data-value="5">5mg</button>
+                        <button data-value="7.5">7.5mg</button>
+                        <button data-value="10">10mg</button>
+                        <button data-value="12">12mg</button>
+                        <button data-value="12.5">12.5mg</button>
+                        <button data-value="15">15mg</button>
+                        <button data-value="17.5">17.5mg</button>
+                        <button data-value="20">20mg</button>
+                        <button data-value="25">25mg</button>
+                        <button data-value="30">30mg</button>
+                    </div>
+                    <div class="custom-input-group centered">
+                        <label for="custom-dose">Personalizado:</label>
+                        <input type="number" id="custom-dose" placeholder="Ex: 3" min="0" step="any">
+                        <span>mg</span>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Results Section -->
+        <section class="results-panel" id="results">
+            <div class="results-header">
+                <h2>Resultados</h2>
+            </div>
+            
+            <div class="results-content" id="results-content">
+                <p class="placeholder-text">Selecione todos os valores acima para ver o resultado.</p>
+                
+                <div class="result-data hidden" id="result-data">
+                    <div class="primary-result">
+                        Para uma dose de <strong class="highlight" id="res-dose-mg">--mg</strong>, puxe na seringa até:
+                        <div class="draw-amount">
+                            <span id="res-draw-ml">-- mL</span>
+                            <span class="divider">ou</span>
+                            <span id="res-draw-units">-- Unidades</span>
+                        </div>
+                    </div>
+
+                    <div class="syringe-visual">
+                        <div class="syringe-wrapper">
+                            <div class="syringe-needle"></div>
+                            <div class="syringe-tip"></div>
+                            <div class="syringe-body">
+                                <div class="syringe-liquid" id="syringe-liquid" style="width: 0%"></div>
+                                <div class="syringe-plunger" id="syringe-plunger" style="left: 0%">
+                                    <div class="plunger-seal"></div>
+                                    <div class="plunger-rod"></div>
+                                    <div class="plunger-thumb"></div>
+                                </div>
+                                <div class="syringe-marks">
+                                    <div class="mark-group"><span>10</span></div>
+                                    <div class="mark-group"><span>20</span></div>
+                                    <div class="mark-group"><span>30</span></div>
+                                    <div class="mark-group"><span>40</span></div>
+                                    <div class="mark-group"><span>50</span></div>
+                                    <div class="mark-group"><span>60</span></div>
+                                    <div class="mark-group"><span>70</span></div>
+                                    <div class="mark-group"><span>80</span></div>
+                                    <div class="mark-group"><span>90</span></div>
+                                    <div class="mark-group"><span>100</span></div>
+                                </div>
+                            </div>
+                            <div class="syringe-flange"></div>
+                        </div>
+                        <div class="syringe-warning hidden" id="syringe-warning">
+                            Atenção: A dose excede a capacidade da seringa selecionada!
+                        </div>
+                    </div>
+
+                    <div class="secondary-results">
+                        <div class="stat">
+                            <span class="label">Concentração Reconstituída:</span>
+                            <span class="value" id="res-concentration">-- mg/mL</span>
+                        </div>
+                        <div class="stat">
+                            <span class="label">O frasco renderá:</span>
+                            <span class="value"><span id="res-doses">--</span> doses de <span id="res-dose-each">--</span>mg</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="actions">
+                <button id="btn-reset" class="btn-secondary">Limpar</button>
+                <button id="btn-print" class="btn-primary">Imprimir</button>
+            </div>
+        </section>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
