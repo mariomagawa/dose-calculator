@@ -53,7 +53,7 @@ body::before {
   content: '';
   position: fixed;
   top: -10%; left: -10%; width: 120%; height: 120%;
-  background: url('/bg.png') center/cover no-repeat;
+  background: url('/dose-calculator/bg.png') center/cover no-repeat;
   z-index: -2;
   opacity: 0.15; /* subtle so it doesn't overpower the UI */
   animation: kenBurns 30s ease-in-out infinite alternate;
