@@ -19,7 +19,7 @@
             <div class="plunger-thumb"></div>
           </div>
           <div class="syringe-marks">
-            <div v-for="mark in marks" :key="mark" class="mark-group">
+            <div v-for="mark in marks" :key="mark" class="mark-group" :style="{ left: getMarkPosition(mark) + '%' }">
               <span>{{ mark }}</span>
             </div>
           </div>
@@ -70,6 +70,11 @@ const marks = computed(() => {
   }
   return arr;
 });
+
+const getMarkPosition = (mark) => {
+  const maxUnits = props.syringeMl * 100;
+  return (mark / maxUnits) * 100;
+};
 </script>
 
 <style scoped>
@@ -192,16 +197,15 @@ const marks = computed(() => {
   position: absolute;
   bottom: -25px;
   left: 0;
-  width: calc(100% - 20px);
-  display: flex;
-  justify-content: space-between;
+  width: 100%;
 }
 
 .mark-group {
+  position: absolute;
   display: flex;
   flex-direction: column;
   align-items: center;
-  position: relative;
+  transform: translateX(-50%);
 }
 
 .mark-group::before {
