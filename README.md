@@ -1,5 +1,15 @@
-# Vue 3 + Vite
+# Calculadora de Dose de Medicamentos
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Uma aplicação web moderna e responsiva (SPA) desenvolvida com Vue 3 e Vite, projetada para facilitar o cálculo de doses e volumes de reconstituição de medicamentos.
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+## Funcionalidades
+
+- **Cálculo de Dose:** Calcule rapidamente a dose exata a ser administrada.
+- **Visualização Dinâmica:** Representação visual interativa e realista de uma seringa de insulina (30, 50 ou 100 unidades) que se ajusta de acordo com o volume calculado.
+- **Totalmente Responsivo:** A interface se adapta perfeitamente a dispositivos móveis e desktops, garantindo a legibilidade da seringa e da interface em qualquer tamanho de tela.
+
+## Tecnologias
+
+- Vue 3
+- Vite
+- HTML & CSS Vanilla
