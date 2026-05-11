@@ -1,9 +1,9 @@
 name: Deploy Vite SPA to GitHub Pages
 
 on:
-  # Roda esse workflow toda vez que você der push na branch main ou feature/v2
+  # Roda esse workflow toda vez que você der push na branch main
   push:
-    branches: ["main", "master", "feature/v2"]
+    branches: ["main", "master"]
   
   # Permite rodar o workflow manualmente pela aba Actions do GitHub
   workflow_dispatch:
