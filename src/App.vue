@@ -165,7 +165,6 @@ const diluentOptions = [
   { value: 1, label: '1mL' },
   { value: 2, label: '2mL' },
   { value: 2.4, label: '2.4mL' },
-  { value: 2.5, label: '2.5mL' },
   { value: 4, label: '4mL' }
 ];
 
@@ -176,7 +175,7 @@ const syringeOptions = [
 ];
 
 const doseOptions = [
-  0.25, 0.5, 1, 1.7, 2, 2.4, 2.5, 4, 5, 7.5, 10, 12, 12.5, 15, 17.5, 20, 25, 30
+  0.5, 1, 1.5, 2, 2.5, 4, 5, 6, 7.5, 9, 10, 12, 12.5, 15
 ].map(v => ({ value: v, label: `${v}mg` }));
 
 // Computed
