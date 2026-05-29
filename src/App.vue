@@ -10,145 +10,170 @@
           <p>Precisão para Reconstituição de Peptídeos</p>
         </div>
       </div>
-      <button class="btn-icon" @click="handlePrint" title="Imprimir" aria-label="Imprimir dosagem">
-        <PrinterIcon :size="20" />
-      </button>
+
+      <div class="header-actions">
+        <nav class="tab-nav">
+          <button
+            class="tab-btn"
+            :class="{ active: state.activeTab === 'calculator' }"
+            @click="state.activeTab = 'calculator'"
+          >
+            <CalculatorIcon :size="16" />
+            <span class="tab-label">Calculadora</span>
+          </button>
+          <button
+            class="tab-btn"
+            :class="{ active: state.activeTab === 'frequency' }"
+            @click="state.activeTab = 'frequency'"
+          >
+            <LineChartIcon :size="16" />
+            <span class="tab-label">Frequência</span>
+          </button>
+        </nav>
+        <button class="btn-icon" @click="handlePrint" title="Imprimir" aria-label="Imprimir dosagem">
+          <PrinterIcon :size="20" />
+        </button>
+      </div>
     </header>
 
-    <main class="main-layout">
-      <!-- Left Column: Inputs (Steps) -->
-      <div class="configuration-section">
-        <OptionGroup
-          :step-number="1"
-          title="Conteúdo do Frasco"
-          subtitle="(mg)"
-          :options="vialOptions"
-          v-model="state.vialMg"
-          allow-custom
-          custom-placeholder="50"
-          custom-unit="mg"
-        />
+    <transition name="fade" mode="out-in">
+      <!-- Calculator View -->
+      <main v-if="state.activeTab === 'calculator'" class="main-layout" key="calculator">
+        <!-- Left Column: Inputs (Steps) -->
+        <div class="configuration-section">
+          <OptionGroup
+            :step-number="1"
+            title="Conteúdo do Frasco"
+            subtitle="(mg)"
+            :options="vialOptions"
+            v-model="state.vialMg"
+            allow-custom
+            custom-placeholder="50"
+            custom-unit="mg"
+          />
 
-        <OptionGroup
-          :step-number="2"
-          title="Quantidade de Diluente"
-          subtitle="(Água Bacteriostática / NaCl)"
-          :options="diluentOptions"
-          v-model="state.diluentMl"
-          allow-custom
-          custom-placeholder="4"
-          custom-unit="mL"
-        />
+          <OptionGroup
+            :step-number="2"
+            title="Quantidade de Diluente"
+            subtitle="(Água Bacteriostática / NaCl)"
+            :options="diluentOptions"
+            v-model="state.diluentMl"
+            allow-custom
+            custom-placeholder="4"
+            custom-unit="mL"
+          />
 
-        <OptionGroup
-          :step-number="3"
-          title="Tamanho da Seringa"
-          subtitle="(U-100)"
-          :options="syringeOptions"
-          v-model="state.syringeMl"
-        />
+          <OptionGroup
+            :step-number="3"
+            title="Tamanho da Seringa"
+            subtitle="(U-100)"
+            :options="syringeOptions"
+            v-model="state.syringeMl"
+          />
 
-        <OptionGroup
-          :step-number="4"
-          title="Dose Desejada"
-          subtitle="(mg)"
-          :options="doseOptions"
-          v-model="state.doseMg"
-          allow-custom
-          custom-placeholder="3"
-          custom-unit="mg"
-          is-compact
-        />
-      </div>
-
-      <!-- Right Column: Results (Sticky) -->
-      <div class="results-section">
-        <div class="results-panel glass-panel sticky-panel">
-          <div class="results-header">
-            <h2>Resultados</h2>
-            <button class="btn-ghost" @click="handleReset" v-if="hasAnyInput">
-              <RefreshCwIcon :size="16" /> Limpar
-            </button>
-          </div>
-
-          <transition name="fade" mode="out-in">
-            <div v-if="!isReady" class="placeholder-state" key="placeholder">
-              <div class="placeholder-icon-wrapper">
-                <BeakerIcon :size="40" class="placeholder-icon" />
-              </div>
-              <p>Conclua todas as etapas para visualizar a extração e informações da sua dose.</p>
-            </div>
-
-            <div v-else class="results-content" key="results">
-              <div class="primary-result">
-                <span>Para uma dose de</span>
-                <strong class="highlight text-gradient">{{ formatNumber(state.doseMg) }}mg</strong>
-                <span>puxe na seringa até:</span>
-                
-                <div class="draw-amounts">
-                  <div class="amount-box">
-                    <span class="value">{{ formatNumber(drawVolume) }}</span>
-                    <span class="unit">mL</span>
-                  </div>
-                  <div class="divider">
-                    <span>ou</span>
-                  </div>
-                  <div class="amount-box primary">
-                    <span class="value">{{ formatNumber(drawUnits) }}</span>
-                    <span class="unit">Unidades</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="visual-container">
-                <SyringeVisual :syringe-ml="state.syringeMl" :draw-volume="drawVolume" />
-              </div>
-
-              <div class="secondary-results">
-                <div class="stat-item">
-                  <DropletIcon :size="18" class="stat-icon" />
-                  <div class="stat-info">
-                    <span class="label">Concentração</span>
-                    <strong class="value">{{ formatNumber(concentration) }} <small>mg/mL</small></strong>
-                  </div>
-                </div>
-                <div class="stat-divider"></div>
-                <div class="stat-item">
-                  <LayersIcon :size="18" class="stat-icon" />
-                  <div class="stat-info">
-                    <span class="label">O frasco renderá</span>
-                    <strong class="value">{{ Math.floor(totalDoses) }} <small>doses</small></strong>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </transition>
+          <OptionGroup
+            :step-number="4"
+            title="Dose Desejada"
+            subtitle="(mg)"
+            :options="doseOptions"
+            v-model="state.doseMg"
+            allow-custom
+            custom-placeholder="3"
+            custom-unit="mg"
+            is-compact
+          />
         </div>
-      </div>
-    </main>
+
+        <!-- Right Column: Results (Sticky) -->
+        <div class="results-section">
+          <div class="results-panel glass-panel sticky-panel">
+            <div class="results-header">
+              <h2>Resultados</h2>
+              <button class="btn-ghost" @click="handleReset" v-if="hasAnyInput">
+                <RefreshCwIcon :size="16" /> Limpar
+              </button>
+            </div>
+
+            <transition name="fade" mode="out-in">
+              <div v-if="!isReady" class="placeholder-state" key="placeholder">
+                <div class="placeholder-icon-wrapper">
+                  <BeakerIcon :size="40" class="placeholder-icon" />
+                </div>
+                <p>Conclua todas as etapas para visualizar a extração e informações da sua dose.</p>
+              </div>
+
+              <div v-else class="results-content" key="results">
+                <div class="primary-result">
+                  <span>Para uma dose de</span>
+                  <strong class="highlight text-gradient">{{ formatNumber(state.doseMg) }}mg</strong>
+                  <span>puxe na seringa até:</span>
+                  
+                  <div class="draw-amounts">
+                    <div class="amount-box">
+                      <span class="value">{{ formatNumber(drawVolume) }}</span>
+                      <span class="unit">mL</span>
+                    </div>
+                    <div class="divider">
+                      <span>ou</span>
+                    </div>
+                    <div class="amount-box primary">
+                      <span class="value">{{ formatNumber(drawUnits) }}</span>
+                      <span class="unit">Unidades</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="visual-container">
+                  <SyringeVisual :syringe-ml="state.syringeMl" :draw-volume="drawVolume" />
+                </div>
+
+                <div class="secondary-results">
+                  <div class="stat-item">
+                    <DropletIcon :size="18" class="stat-icon" />
+                    <div class="stat-info">
+                      <span class="label">Concentração</span>
+                      <strong class="value">{{ formatNumber(concentration) }} <small>mg/mL</small></strong>
+                    </div>
+                  </div>
+                  <div class="stat-divider"></div>
+                  <div class="stat-item">
+                    <LayersIcon :size="18" class="stat-icon" />
+                    <div class="stat-info">
+                      <span class="label">O frasco renderá</span>
+                      <strong class="value">{{ Math.floor(totalDoses) }} <small>doses</small></strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </transition>
+          </div>
+        </div>
+      </main>
+
+      <!-- Frequency View -->
+      <main v-else-if="state.activeTab === 'frequency'" class="frequency-layout" key="frequency">
+        <FrequencyView />
+      </main>
+    </transition>
   </div>
 </template>
 
 <script setup>
-import { reactive, computed } from 'vue';
+import { computed } from 'vue';
 import { 
   Activity as ActivityIcon, 
   Printer as PrinterIcon, 
   RefreshCw as RefreshCwIcon,
   Beaker as BeakerIcon,
   Droplet as DropletIcon,
-  Layers as LayersIcon
+  Layers as LayersIcon,
+  Calculator as CalculatorIcon,
+  LineChart as LineChartIcon,
 } from 'lucide-vue-next';
+import { state } from './state.js';
 import OptionGroup from './components/OptionGroup.vue';
 import SyringeVisual from './components/SyringeVisual.vue';
-
-// State
-const state = reactive({
-  vialMg: null,
-  diluentMl: null,
-  syringeMl: null,
-  doseMg: null
-});
+import FrequencyView from './components/FrequencyView.vue';
 
 // Options data
 const vialOptions = [
@@ -252,6 +277,50 @@ const handlePrint = () => {
   margin-top: 0.2rem;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* Tab Navigation */
+.tab-nav {
+  display: flex;
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--surface-border);
+  padding: 3px;
+  gap: 2px;
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-md) - 2px);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tab-btn.active {
+  color: var(--text-primary);
+  background: var(--primary);
+  box-shadow: 0 2px 8px var(--primary-glow);
+}
+
 .btn-icon {
   background: transparent;
   border: 1px solid var(--surface-border);
@@ -278,6 +347,10 @@ const handlePrint = () => {
   grid-template-columns: 1.1fr 1fr;
   gap: 2.5rem;
   align-items: start;
+}
+
+.frequency-layout {
+  width: 100%;
 }
 
 .configuration-section {
@@ -499,7 +572,7 @@ const handlePrint = () => {
 @media print {
   body { background: white; color: black; }
   .glass-panel { background: none; border: 1px solid #ccc; box-shadow: none; filter: none !important; }
-  .btn-icon, .btn-ghost { display: none; }
+  .btn-icon, .btn-ghost, .tab-nav { display: none; }
   .app-container { padding: 0; }
   .text-gradient { background: none; -webkit-text-fill-color: black; color: black; }
   .syringe-liquid { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -523,12 +596,25 @@ const handlePrint = () => {
   }
 }
 
+@media (max-width: 768px) {
+  .app-header {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+  .header-actions {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 @media (max-width: 640px) {
   .draw-amounts { flex-direction: column; gap: 1rem; }
   .amount-box { width: 100%; }
   .divider { margin: -0.5rem 0; z-index: 1; }
   .secondary-results { flex-direction: column; gap: 1.5rem; align-items: flex-start; }
   .stat-divider { width: 100%; height: 1px; }
-  .app-header { flex-direction: column; text-align: center; gap: 1rem; }
+  .tab-label { display: none; }
+  .tab-btn { padding: 0.5rem 0.75rem; }
 }
 </style>
