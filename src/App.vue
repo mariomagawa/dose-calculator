@@ -30,9 +30,6 @@
             <span class="tab-label">Frequência</span>
           </button>
         </nav>
-        <button class="btn-icon" @click="handlePrint" title="Imprimir" aria-label="Imprimir dosagem">
-          <PrinterIcon :size="20" />
-        </button>
       </div>
     </header>
 
@@ -162,7 +159,6 @@
 import { computed } from 'vue';
 import { 
   Activity as ActivityIcon, 
-  Printer as PrinterIcon, 
   RefreshCw as RefreshCwIcon,
   Beaker as BeakerIcon,
   Droplet as DropletIcon,
@@ -200,7 +196,7 @@ const syringeOptions = [
 ];
 
 const doseOptions = [
-  0.5, 1, 1.5, 2, 2.5, 4, 5, 6, 7.5, 9, 10, 12, 12.5, 15
+  0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6, 7.5, 9, 10, 12, 12.5, 15
 ].map(v => ({ value: v, label: `${v}mg` }));
 
 // Computed
@@ -222,10 +218,6 @@ const handleReset = () => {
   state.diluentMl = null;
   state.syringeMl = null;
   state.doseMg = null;
-};
-
-const handlePrint = () => {
-  window.print();
 };
 </script>
 
