@@ -174,21 +174,21 @@ watch(() => props.modelValue, (newVal) => {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(102px, 1fr));
+  gap: 0.9rem;
 }
 
 .grid.compact {
-  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
 }
 
 .opt-btn {
   background: rgba(30, 41, 59, 0.5);
   border: 1px solid var(--surface-border);
   color: var(--text-secondary);
-  padding: 0.85rem 0.5rem;
+  padding: 1.02rem 0.6rem;
   border-radius: var(--radius-md);
-  font-size: 0.95rem;
+  font-size: 1.14rem;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
@@ -249,18 +249,18 @@ watch(() => props.modelValue, (newVal) => {
   background: var(--bg-color);
   border: 1px solid var(--primary);
   border-radius: var(--radius-md);
-  padding: 0 1rem;
+  padding: 0 1.2rem;
   box-shadow: 0 0 0 3px var(--surface-active);
   transition: all 0.2s;
   height: 100%;
-  min-height: 48px;
+  min-height: 58px;
 }
 
 .custom-input-box input {
   background: transparent;
   border: none;
   color: var(--text-primary);
-  font-size: 1.05rem;
+  font-size: 1.26rem;
   width: 100%;
   outline: none;
   font-weight: 600;
@@ -274,7 +274,7 @@ watch(() => props.modelValue, (newVal) => {
 .custom-input-box .unit {
   color: var(--primary-hover);
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 1.08rem;
 }
 
 @media (max-width: 640px) {

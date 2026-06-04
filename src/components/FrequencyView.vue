@@ -889,9 +889,9 @@ const formatNumber = (num, decimals = 1) => {
   background: rgba(30, 41, 59, 0.6);
   border: 1px solid var(--surface-border);
   color: var(--text-secondary);
-  padding: 0.45rem 0.75rem;
+  padding: 0.54rem 0.9rem;
   border-radius: 8px;
-  font-size: 0.85rem;
+  font-size: 1.02rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -919,7 +919,7 @@ const formatNumber = (num, decimals = 1) => {
   border-radius: 8px;
   overflow: hidden;
   transition: all 0.2s;
-  min-width: 50px;
+  min-width: 60px;
 }
 
 .freq-custom.active {
@@ -932,12 +932,12 @@ const formatNumber = (num, decimals = 1) => {
   background: transparent;
   border: none;
   color: var(--text-primary);
-  font-size: 0.85rem;
+  font-size: 1.02rem;
   font-weight: 600;
   font-family: inherit;
   outline: none;
-  padding: 0.45rem 0.5rem;
-  width: 50px;
+  padding: 0.54rem 0.6rem;
+  width: 60px;
   text-align: center;
 }
 
