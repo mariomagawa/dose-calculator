@@ -18,7 +18,7 @@
             :class="{ active: state.activeTab === 'calculator' }"
             @click="state.activeTab = 'calculator'"
           >
-            <CalculatorIcon :size="16" />
+            <CalculatorIcon :size="20" />
             <span class="tab-label">Calculadora</span>
           </button>
           <button
@@ -26,7 +26,7 @@
             :class="{ active: state.activeTab === 'frequency' }"
             @click="state.activeTab = 'frequency'"
           >
-            <LineChartIcon :size="16" />
+            <LineChartIcon :size="20" />
             <span class="tab-label">Frequência</span>
           </button>
         </nav>
@@ -289,12 +289,12 @@ const handleReset = () => {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.5rem 1rem;
+  padding: 0.6rem 1.2rem;
   background: transparent;
   border: none;
   border-radius: calc(var(--radius-md) - 2px);
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: 1.02rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
@@ -607,6 +607,6 @@ const handleReset = () => {
   .secondary-results { flex-direction: column; gap: 1.5rem; align-items: flex-start; }
   .stat-divider { width: 100%; height: 1px; }
   .tab-label { display: none; }
-  .tab-btn { padding: 0.5rem 0.75rem; }
+  .tab-btn { padding: 0.6rem 0.9rem; }
 }
 </style>
