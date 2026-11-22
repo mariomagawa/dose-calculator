@@ -1,30 +1,57 @@
 <template>
   <div class="frequency-view">
     <!-- Configuration Panel -->
-    <div class="config-panel glass-panel">
+    <section class="config-panel card-panel">
       <div class="config-header">
         <div class="title-wrap">
-          <span class="step-badge"><FlaskConicalIcon :size="16" /></span>
-          <h3>Simulação Farmacocinética</h3>
+          <span class="step-badge step-zero">
+            <FlaskConicalIcon :size="16" />
+          </span>
+          <div>
+            <h3>Simulação Farmacocinética</h3>
+            <p class="config-subtitle">
+              Configure até dois protocolos para comparar empilhamento, steady-state e flutuação plasmática.
+            </p>
+          </div>
         </div>
-        <p class="config-subtitle">Configure dois protocolos para comparar o empilhamento da droga no sangue.</p>
       </div>
 
-      <!-- Medication Selector -->
-      <div class="config-section">
-        <label class="config-label">
-          <PillIcon :size="16" />
-          Medicamento
-        </label>
-        <div class="select-wrap">
-          <select v-model="selectedMedication" class="custom-select">
-            <optgroup v-for="group in medicationGroups" :key="group.label" :label="group.label">
-              <option v-for="med in group.items" :key="med.name" :value="med.name">
-                {{ med.name }} (t½ = {{ med.halfLife }}d)
-              </option>
-            </optgroup>
-          </select>
-          <ChevronDownIcon :size="16" class="select-chevron" />
+      <!-- Medication Selector (+ Custom Half-life if Modo Livre) -->
+      <div class="med-controls-grid">
+        <div class="config-section">
+          <label class="config-label" for="med-select">
+            <PillIcon :size="15" />
+            <span>Medicamento / Peptídeo</span>
+          </label>
+          <div class="select-wrap">
+            <select
+              id="med-select"
+              v-model="freqState.selectedMedication"
+              class="custom-select"
+              @change="handleMedicationChange"
+            >
+              <optgroup v-for="group in medicationGroups" :key="group.label" :label="group.label">
+                <option v-for="med in group.items" :key="med.name" :value="med.name">
+                  {{ med.name }} ({{ med.isCustom ? `t½ = ${formatHalfLife(freqState.customHalfLifeDays)}` : `t½ = ${formatHalfLife(med.halfLife)}` }})
+                </option>
+              </optgroup>
+            </select>
+            <ChevronDownIcon :size="16" class="select-chevron" />
+          </div>
+        </div>
+
+        <div v-if="isCustomMedication" class="config-section custom-hl-section">
+          <label class="config-label" for="custom-hl-input">
+            <span>Meia-vida (dias)</span>
+          </label>
+          <input
+            id="custom-hl-input"
+            type="number"
+            v-model.number="freqState.customHalfLifeDays"
+            min="0.02"
+            step="0.5"
+            class="field-input mono-num"
+          />
         </div>
       </div>
 
@@ -36,22 +63,63 @@
             <div class="protocol-dot dot-a"></div>
             <input
               type="text"
-              v-model="protocolALabel"
+              v-model="freqState.protocolA.label"
               class="protocol-label-input"
-              maxlength="20"
+              maxlength="22"
+              aria-label="Nome do protocolo A"
             />
             <span class="protocol-style">Tracejado</span>
           </div>
 
           <div class="protocol-field">
-            <label>Dose (mg)</label>
+            <div class="field-label-row">
+              <label for="dose-a">
+                Dose ({{ activeUnit === 'UI' ? 'UI' : freqState.protocolA.doseUnit }})
+              </label>
+              <div class="field-label-actions">
+                <button
+                  v-if="showCalcSyncA"
+                  type="button"
+                  class="btn-sync-calc"
+                  @click="syncCalcDose('protocolA')"
+                >
+                  Usar {{ formatDoseDisplay(state.doseAmount, activeUnit, freqState.protocolA.doseUnit === 'mcg') }} da Calculadora
+                </button>
+                <div
+                  v-if="activeUnit === 'mg'"
+                  class="dose-unit-toggle"
+                  role="group"
+                  aria-label="Unidade da dose do Protocolo A"
+                >
+                  <button
+                    type="button"
+                    class="unit-toggle-btn"
+                    :class="{ active: freqState.protocolA.doseUnit === 'mg' }"
+                    @click="setProtocolDoseUnit('protocolA', 'mg')"
+                  >
+                    mg
+                  </button>
+                  <button
+                    type="button"
+                    class="unit-toggle-btn"
+                    :class="{ active: freqState.protocolA.doseUnit === 'mcg' }"
+                    @click="setProtocolDoseUnit('protocolA', 'mcg')"
+                  >
+                    mcg
+                  </button>
+                </div>
+              </div>
+            </div>
             <input
-              type="number"
-              v-model.number="protocolADose"
-              min="0.1"
-              step="0.5"
-              placeholder="5"
-              class="field-input"
+              id="dose-a"
+              ref="doseInputARef"
+              type="text"
+              inputmode="decimal"
+              :value="doseTextA"
+              :placeholder="getDosePlaceholder('protocolA', '5')"
+              class="field-input mono-num"
+              @input="onDoseInput('protocolA', $event)"
+              @blur="onDoseBlur('protocolA')"
             />
           </div>
 
@@ -60,23 +128,26 @@
             <div class="freq-buttons">
               <button
                 v-for="freq in frequencyOptions"
-                :key="'a-' + freq"
-                class="freq-btn"
-                :class="{ selected: protocolAFreq === freq && !customAActive }"
-                @click="setFreqA(freq)"
+                :key="'a-' + freq.value"
+                type="button"
+                class="freq-btn mono-num"
+                :class="{ selected: freqState.protocolA.freq === freq.value && !freqState.protocolA.customActive }"
+                @click="setFreq('protocolA', freq.value)"
               >
-                {{ freq }}d
+                {{ freq.label }}
               </button>
-              <div class="freq-custom" :class="{ active: customAActive }">
+              <div class="freq-custom" :class="{ active: freqState.protocolA.customActive }">
                 <input
                   type="number"
-                  v-model.number="protocolAFreqCustom"
-                  min="0.5"
-                  step="0.5"
+                  v-model.number="freqState.protocolA.freqCustom"
+                  min="0.125"
+                  step="0.25"
                   placeholder="..."
-                  class="freq-custom-input"
-                  @focus="customAActive = true"
-                  @input="onCustomAInput"
+                  aria-label="Frequência personalizada protocolo A"
+                  class="freq-custom-input mono-num"
+                  @focus="freqState.protocolA.customActive = true"
+                  @input="onCustomInput('protocolA')"
+                  @blur="onCustomBlur('protocolA')"
                 />
               </div>
             </div>
@@ -89,22 +160,63 @@
             <div class="protocol-dot dot-b"></div>
             <input
               type="text"
-              v-model="protocolBLabel"
+              v-model="freqState.protocolB.label"
               class="protocol-label-input"
-              maxlength="20"
+              maxlength="22"
+              aria-label="Nome do protocolo B"
             />
             <span class="protocol-style">Sólido</span>
           </div>
 
           <div class="protocol-field">
-            <label>Dose (mg)</label>
+            <div class="field-label-row">
+              <label for="dose-b">
+                Dose ({{ activeUnit === 'UI' ? 'UI' : freqState.protocolB.doseUnit }})
+              </label>
+              <div class="field-label-actions">
+                <button
+                  v-if="showCalcSyncB"
+                  type="button"
+                  class="btn-sync-calc"
+                  @click="syncCalcDose('protocolB')"
+                >
+                  Usar {{ formatDoseDisplay(state.doseAmount, activeUnit, freqState.protocolB.doseUnit === 'mcg') }} da Calculadora
+                </button>
+                <div
+                  v-if="activeUnit === 'mg'"
+                  class="dose-unit-toggle"
+                  role="group"
+                  aria-label="Unidade da dose do Protocolo B"
+                >
+                  <button
+                    type="button"
+                    class="unit-toggle-btn"
+                    :class="{ active: freqState.protocolB.doseUnit === 'mg' }"
+                    @click="setProtocolDoseUnit('protocolB', 'mg')"
+                  >
+                    mg
+                  </button>
+                  <button
+                    type="button"
+                    class="unit-toggle-btn"
+                    :class="{ active: freqState.protocolB.doseUnit === 'mcg' }"
+                    @click="setProtocolDoseUnit('protocolB', 'mcg')"
+                  >
+                    mcg
+                  </button>
+                </div>
+              </div>
+            </div>
             <input
-              type="number"
-              v-model.number="protocolBDose"
-              min="0.1"
-              step="0.5"
-              placeholder="3"
-              class="field-input"
+              id="dose-b"
+              ref="doseInputBRef"
+              type="text"
+              inputmode="decimal"
+              :value="doseTextB"
+              :placeholder="getDosePlaceholder('protocolB', '2.5')"
+              class="field-input mono-num"
+              @input="onDoseInput('protocolB', $event)"
+              @blur="onDoseBlur('protocolB')"
             />
           </div>
 
@@ -113,23 +225,26 @@
             <div class="freq-buttons">
               <button
                 v-for="freq in frequencyOptions"
-                :key="'b-' + freq"
-                class="freq-btn"
-                :class="{ selected: protocolBFreq === freq && !customBActive }"
-                @click="setFreqB(freq)"
+                :key="'b-' + freq.value"
+                type="button"
+                class="freq-btn mono-num"
+                :class="{ selected: freqState.protocolB.freq === freq.value && !freqState.protocolB.customActive }"
+                @click="setFreq('protocolB', freq.value)"
               >
-                {{ freq }}d
+                {{ freq.label }}
               </button>
-              <div class="freq-custom" :class="{ active: customBActive }">
+              <div class="freq-custom" :class="{ active: freqState.protocolB.customActive }">
                 <input
                   type="number"
-                  v-model.number="protocolBFreqCustom"
-                  min="0.5"
-                  step="0.5"
+                  v-model.number="freqState.protocolB.freqCustom"
+                  min="0.125"
+                  step="0.25"
                   placeholder="..."
-                  class="freq-custom-input"
-                  @focus="customBActive = true"
-                  @input="onCustomBInput"
+                  aria-label="Frequência personalizada protocolo B"
+                  class="freq-custom-input mono-num"
+                  @focus="freqState.protocolB.customActive = true"
+                  @input="onCustomInput('protocolB')"
+                  @blur="onCustomBlur('protocolB')"
                 />
               </div>
             </div>
@@ -142,196 +257,294 @@
         <div v-if="chartDataA || chartDataB" class="summary-stats">
           <div v-if="chartDataA" class="summary-col summary-a">
             <span class="summary-title">
-              <span class="protocol-dot dot-a" style="width:8px;height:8px;"></span>
-              {{ protocolALabel }}
+              <span class="protocol-dot dot-a"></span>
+              {{ chartDataA.label }}
             </span>
             <div class="summary-row">
               <span>Pico (steady-state)</span>
-              <strong>~{{ chartDataA.peakSteady.toFixed(1) }}mg</strong>
+              <strong class="mono-num">~{{ formatMetric(chartDataA.peakSteady, 2) }}{{ activeUnit }}</strong>
             </div>
             <div class="summary-row">
               <span>Vale (steady-state)</span>
-              <strong>~{{ chartDataA.troughSteady.toFixed(1) }}mg</strong>
+              <strong class="mono-num">
+                {{ chartDataA.isCompleteWashout ? `~0${activeUnit}` : `~${formatMetric(chartDataA.troughSteady, 2)}${activeUnit}` }}
+              </strong>
+            </div>
+            <div class="summary-row">
+              <span>Média no ciclo</span>
+              <strong class="mono-num">~{{ formatMetric(chartDataA.averageSteady, 2) }}{{ activeUnit }}</strong>
+            </div>
+            <div class="summary-row">
+              <span>Acúmulo</span>
+              <strong class="mono-num">{{ formatMetric(chartDataA.accumulationRatio, 2) }}×</strong>
             </div>
             <div class="summary-row">
               <span>Flutuação</span>
-              <strong>{{ ((chartDataA.peakSteady - chartDataA.troughSteady) / chartDataA.troughSteady * 100).toFixed(0) }}%</strong>
+              <span v-if="chartDataA.isCompleteWashout" class="washout-badge">Sem acúmulo</span>
+              <strong v-else class="mono-num">{{ Math.round(chartDataA.fluctuationPct) }}%</strong>
             </div>
           </div>
-          <div class="summary-divider"></div>
+
+          <div v-if="chartDataA && chartDataB" class="summary-divider"></div>
+
           <div v-if="chartDataB" class="summary-col summary-b">
             <span class="summary-title">
-              <span class="protocol-dot dot-b" style="width:8px;height:8px;"></span>
-              {{ protocolBLabel }}
+              <span class="protocol-dot dot-b"></span>
+              {{ chartDataB.label }}
             </span>
             <div class="summary-row">
               <span>Pico (steady-state)</span>
-              <strong>~{{ chartDataB.peakSteady.toFixed(1) }}mg</strong>
+              <strong class="mono-num">~{{ formatMetric(chartDataB.peakSteady, 2) }}{{ activeUnit }}</strong>
             </div>
             <div class="summary-row">
               <span>Vale (steady-state)</span>
-              <strong>~{{ chartDataB.troughSteady.toFixed(1) }}mg</strong>
+              <strong class="mono-num">
+                {{ chartDataB.isCompleteWashout ? `~0${activeUnit}` : `~${formatMetric(chartDataB.troughSteady, 2)}${activeUnit}` }}
+              </strong>
+            </div>
+            <div class="summary-row">
+              <span>Média no ciclo</span>
+              <strong class="mono-num">~{{ formatMetric(chartDataB.averageSteady, 2) }}{{ activeUnit }}</strong>
+            </div>
+            <div class="summary-row">
+              <span>Acúmulo</span>
+              <strong class="mono-num">{{ formatMetric(chartDataB.accumulationRatio, 2) }}×</strong>
             </div>
             <div class="summary-row">
               <span>Flutuação</span>
-              <strong>{{ ((chartDataB.peakSteady - chartDataB.troughSteady) / chartDataB.troughSteady * 100).toFixed(0) }}%</strong>
+              <span v-if="chartDataB.isCompleteWashout" class="washout-badge">Sem acúmulo</span>
+              <strong v-else class="mono-num">{{ Math.round(chartDataB.fluctuationPct) }}%</strong>
             </div>
           </div>
         </div>
       </transition>
-    </div>
+    </section>
 
     <!-- Chart Panel -->
-    <div class="chart-panel glass-panel">
-      <transition name="fade" mode="out-in">
-        <div v-if="!chartDataA && !chartDataB" class="chart-placeholder" key="empty">
-          <div class="placeholder-icon-wrapper">
-            <LineChartIcon :size="40" class="placeholder-icon" />
-          </div>
-          <p>Preencha a dose e a frequência de pelo menos um protocolo para gerar o gráfico de empilhamento.</p>
+    <section class="chart-panel card-panel">
+      <div v-if="!chartDataA && !chartDataB" class="chart-placeholder">
+        <div class="placeholder-icon-wrapper">
+          <LineChartIcon :size="36" class="placeholder-icon" />
         </div>
-
-        <StackingChart
-          v-else
-          :key="chartKey"
-          :protocol-a="chartDataA"
-          :protocol-b="chartDataB"
-          :medication="selectedMedication"
-        />
-      </transition>
-    </div>
-
-    <!-- Vial Duration Simulation Panel -->
-    <div class="vial-simulation-panel glass-panel">
-      <div class="sim-header">
-        <div class="title-wrap">
-          <span class="step-badge"><HourglassIcon :size="16" /></span>
-          <h3>Simulação de Duração do Frasco</h3>
-        </div>
-        <p class="sim-subtitle">Compare quanto tempo dura um frasco de medicamento em cada frequência e veja o rendimento.</p>
+        <p>Preencha a dose e a frequência de pelo menos um protocolo para gerar o gráfico de empilhamento.</p>
       </div>
 
-      <!-- Informações do Frasco (Somente Leitura - Configuradas na Calculadora) -->
-      <div class="sim-vial-info-row">
-        <div v-if="isCalculatorConfigured" class="vial-info-pill-container">
-          <div class="vial-info-pill">
-            <span class="pill-label">Conteúdo do Frasco</span>
-            <strong class="pill-value text-gradient">{{ state.vialMg }}mg</strong>
-          </div>
-          <div class="vial-info-pill">
-            <span class="pill-label">Quantidade de Diluente</span>
-            <strong class="pill-value">{{ state.diluentMl }}mL</strong>
-          </div>
-          <div class="vial-info-pill">
-            <span class="pill-label">Concentração</span>
-            <strong class="pill-value">{{ formatNumber(concentration, 2) }}mg/mL</strong>
+      <StackingChart
+        v-else
+        :protocol-a="chartDataA"
+        :protocol-b="chartDataB"
+        :medication="freqState.selectedMedication"
+        :unit="activeUnit"
+        :theme="state.theme"
+      />
+    </section>
+
+    <!-- Vial Duration Simulation Panel -->
+    <section class="vial-simulation-panel card-panel">
+      <div class="sim-header">
+        <div class="title-wrap">
+          <span class="step-badge">
+            <HourglassIcon :size="16" />
+          </span>
+          <div>
+            <h3>Simulação de Duração do Frasco</h3>
+            <p class="sim-subtitle">Compare quanto tempo dura o frasco configurado na Calculadora em cada frequência.</p>
           </div>
         </div>
-        <div v-else class="vial-info-warning">
-          <AlertCircleIcon :size="18" class="warning-icon" />
-          <span>Defina o <strong>Conteúdo do Frasco</strong> e o <strong>Diluente</strong> na aba <a class="link-tab" @click="goToCalculator">Calculadora</a> para visualizar a simulação.</span>
+      </div>
+
+      <!-- Vial Info Row (with quick vial selector; diluentMl is optional) -->
+      <div class="sim-vial-info-row">
+        <div class="quick-vial-selector">
+          <div class="quick-vial-header">
+            <span class="pill-label">Tamanho do Frasco ({{ activeUnit }})</span>
+            <span v-if="!isVialConfigured" class="quick-vial-hint">
+              Selecione um frasco abaixo ou na
+              <button type="button" class="link-tab" @click="goToCalculator">Calculadora</button>
+            </span>
+          </div>
+
+          <div class="quick-vial-pills">
+            <button
+              v-for="v in selectedMedVials"
+              :key="'qv-' + v"
+              type="button"
+              class="quick-vial-btn mono-num"
+              :class="{ active: isVialSelected(v) }"
+              @click="state.vialAmount = v"
+            >
+              {{ v }}{{ activeUnit }}
+            </button>
+            <div class="quick-vial-custom">
+              <input
+                type="number"
+                v-model.number="state.vialAmount"
+                min="0.1"
+                step="any"
+                placeholder="Outro"
+                aria-label="Frasco personalizado na simulação"
+                class="quick-vial-input mono-num"
+              />
+              <span class="mono-num">{{ activeUnit }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="isVialConfigured" class="vial-info-pill-container">
+          <div class="vial-info-pill">
+            <span class="pill-label">Conteúdo do Frasco</span>
+            <strong class="pill-value mono-num">{{ state.vialAmount }}{{ activeUnit }}</strong>
+          </div>
+
+          <template v-if="isDiluentConfigured">
+            <div class="vial-info-pill">
+              <span class="pill-label">Diluente</span>
+              <strong class="pill-value mono-num">{{ state.diluentMl }}mL</strong>
+            </div>
+            <div class="vial-info-pill">
+              <span class="pill-label">Concentração</span>
+              <strong class="pill-value mono-num">{{ formatMetric(concentration, 2) }}{{ activeUnit }}/mL</strong>
+            </div>
+          </template>
+          <div v-else class="vial-info-pill info-optional">
+            <span class="pill-label">Diluente</span>
+            <span class="pill-hint">
+              Opcional para duração · <button type="button" class="link-tab" @click="goToCalculator">Definir na Calculadora</button>
+            </span>
+          </div>
         </div>
       </div>
 
       <!-- Simulation Results Cards -->
       <div class="sim-results-grid">
         <!-- Protocol A Result -->
-        <div class="sim-card protocol-a-card" :class="{ disabled: !hasProtocolA }">
+        <div class="sim-card protocol-a-card" :class="{ disabled: !vialDurationA }">
           <div class="sim-card-header">
             <span class="protocol-title">
               <span class="protocol-dot dot-a"></span>
-              {{ protocolALabel }}
+              {{ freqState.protocolA.label || 'Protocolo A' }}
             </span>
-            <span class="protocol-summary-badge" v-if="hasProtocolA">{{ protocolADose }}mg a cada {{ effectiveFreqA }}d</span>
+            <span v-if="vialDurationA" class="protocol-summary-badge mono-num">
+              {{ formatDoseDisplay(freqState.protocolA.dose, activeUnit, freqState.protocolA.doseUnit === 'mcg') }} / {{ effectiveFreqA }}d
+            </span>
           </div>
 
-          <div v-if="hasProtocolA" class="sim-card-content">
-            <div class="main-duration">
-              <span class="duration-value">{{ formatDuration(durationDaysA) }}</span>
-              <span class="duration-label">Duração Estimada</span>
+          <div v-if="vialDurationA" class="sim-card-content">
+            <div v-if="vialDurationA.exceedsVial" class="sim-vial-alert">
+              <AlertTriangleIcon :size="16" />
+              <span>Dose ({{ freqState.protocolA.dose }}{{ activeUnit }}) excede o frasco ({{ state.vialAmount }}{{ activeUnit }}).</span>
             </div>
-            
-            <div class="sim-details">
-              <div class="sim-detail-row">
-                <span>Rendimento total</span>
-                <strong>{{ formatNumber(dosesPerVialA, 1) }} doses</strong>
+
+            <template v-else>
+              <div class="main-duration">
+                <span class="duration-value">{{ formatDuration(vialDurationA.durationDays) }}</span>
+                <span class="duration-label">Duração Estimada</span>
               </div>
-              <div class="sim-detail-row">
-                <span>Consumo semanal</span>
-                <strong>{{ formatNumber(weeklyConsumptionA, 2) }} mg/sem</strong>
+
+              <div class="sim-details">
+                <div class="sim-detail-row">
+                  <span>Rendimento</span>
+                  <strong class="mono-num">
+                    {{ vialDurationA.fullDoses }} {{ vialDurationA.fullDoses === 1 ? 'dose' : 'doses' }}
+                    <small v-if="vialDurationA.leftoverAmount > 0" class="leftover-note">
+                      (+ sobra {{ formatMetric(vialDurationA.leftoverAmount, 2) }}{{ activeUnit }})
+                    </small>
+                  </strong>
+                </div>
+                <div class="sim-detail-row">
+                  <span>Consumo semanal</span>
+                  <strong class="mono-num">{{ formatMetric(vialDurationA.weeklyConsumption, 2) }} {{ activeUnit }}/sem</strong>
+                </div>
+                <div class="sim-detail-row">
+                  <span>Total de dias</span>
+                  <strong class="mono-num">{{ Math.round(vialDurationA.durationDays) }} dias</strong>
+                </div>
               </div>
-              <div class="sim-detail-row">
-                <span>Total de dias</span>
-                <strong>{{ Math.round(durationDaysA) }} dias</strong>
-              </div>
-            </div>
+            </template>
           </div>
           <div v-else class="sim-card-placeholder">
-            <p v-if="!isCalculatorConfigured">
-              Defina o frasco e o diluente na aba <a class="link-tab" @click="goToCalculator">Calculadora</a> primeiro.
+            <p v-if="!isVialConfigured">
+              Defina o frasco na aba <button type="button" class="link-tab" @click="goToCalculator">Calculadora</button> primeiro.
             </p>
             <p v-else>
-              Configure a dose e a frequência do protocolo {{ protocolALabel }} acima para ver a simulação.
+              Configure a dose e a frequência de {{ freqState.protocolA.label || 'Protocolo A' }} acima.
             </p>
           </div>
         </div>
 
         <!-- Protocol B Result -->
-        <div class="sim-card protocol-b-card" :class="{ disabled: !hasProtocolB }">
+        <div class="sim-card protocol-b-card" :class="{ disabled: !vialDurationB }">
           <div class="sim-card-header">
             <span class="protocol-title">
               <span class="protocol-dot dot-b"></span>
-              {{ protocolBLabel }}
+              {{ freqState.protocolB.label || 'Protocolo B' }}
             </span>
-            <span class="protocol-summary-badge" v-if="hasProtocolB">{{ protocolBDose }}mg a cada {{ effectiveFreqB }}d</span>
+            <span v-if="vialDurationB" class="protocol-summary-badge mono-num">
+              {{ formatDoseDisplay(freqState.protocolB.dose, activeUnit, freqState.protocolB.doseUnit === 'mcg') }} / {{ effectiveFreqB }}d
+            </span>
           </div>
 
-          <div v-if="hasProtocolB" class="sim-card-content">
-            <div class="main-duration">
-              <span class="duration-value">{{ formatDuration(durationDaysB) }}</span>
-              <span class="duration-label">Duração Estimada</span>
+          <div v-if="vialDurationB" class="sim-card-content">
+            <div v-if="vialDurationB.exceedsVial" class="sim-vial-alert">
+              <AlertTriangleIcon :size="16" />
+              <span>Dose ({{ freqState.protocolB.dose }}{{ activeUnit }}) excede o frasco ({{ state.vialAmount }}{{ activeUnit }}).</span>
             </div>
-            
-            <div class="sim-details">
-              <div class="sim-detail-row">
-                <span>Rendimento total</span>
-                <strong>{{ formatNumber(dosesPerVialB, 1) }} doses</strong>
+
+            <template v-else>
+              <div class="main-duration">
+                <span class="duration-value">{{ formatDuration(vialDurationB.durationDays) }}</span>
+                <span class="duration-label">Duração Estimada</span>
               </div>
-              <div class="sim-detail-row">
-                <span>Consumo semanal</span>
-                <strong>{{ formatNumber(weeklyConsumptionB, 2) }} mg/sem</strong>
+
+              <div class="sim-details">
+                <div class="sim-detail-row">
+                  <span>Rendimento</span>
+                  <strong class="mono-num">
+                    {{ vialDurationB.fullDoses }} {{ vialDurationB.fullDoses === 1 ? 'dose' : 'doses' }}
+                    <small v-if="vialDurationB.leftoverAmount > 0" class="leftover-note">
+                      (+ sobra {{ formatMetric(vialDurationB.leftoverAmount, 2) }}{{ activeUnit }})
+                    </small>
+                  </strong>
+                </div>
+                <div class="sim-detail-row">
+                  <span>Consumo semanal</span>
+                  <strong class="mono-num">{{ formatMetric(vialDurationB.weeklyConsumption, 2) }} {{ activeUnit }}/sem</strong>
+                </div>
+                <div class="sim-detail-row">
+                  <span>Total de dias</span>
+                  <strong class="mono-num">{{ Math.round(vialDurationB.durationDays) }} dias</strong>
+                </div>
               </div>
-              <div class="sim-detail-row">
-                <span>Total de dias</span>
-                <strong>{{ Math.round(durationDaysB) }} dias</strong>
-              </div>
-            </div>
+            </template>
           </div>
           <div v-else class="sim-card-placeholder">
-            <p v-if="!isCalculatorConfigured">
-              Defina o frasco e o diluente na aba <a class="link-tab" @click="goToCalculator">Calculadora</a> primeiro.
+            <p v-if="!isVialConfigured">
+              Defina o frasco na aba <button type="button" class="link-tab" @click="goToCalculator">Calculadora</button> primeiro.
             </p>
             <p v-else>
-              Configure a dose e a frequência do protocolo {{ protocolBLabel }} acima para ver a simulação.
+              Configure a dose e a frequência de {{ freqState.protocolB.label || 'Protocolo B' }} acima.
             </p>
           </div>
         </div>
       </div>
 
-      <!-- Comparison Banner -->
+      <!-- Comparison Banner (neutral/winning protocol colors, never error red!) -->
       <transition name="fade">
-        <div v-if="hasProtocolA && hasProtocolB" class="sim-comparison-banner" :class="comparisonClass">
+        <div
+          v-if="canCompareVialDuration"
+          class="sim-comparison-banner"
+          :class="comparisonClass"
+        >
           <div class="comparison-icon-wrap">
-            <SparklesIcon v-if="differenceDays > 0" :size="20" />
-            <AlertCircleIcon v-else-if="differenceDays < 0" :size="20" />
-            <CheckCircleIcon v-else :size="20" />
+            <CheckCircleIcon v-if="Math.abs(differenceDays) < 0.01" :size="18" />
+            <SparklesIcon v-else :size="18" />
           </div>
           <div class="comparison-text">
-            <h4 v-if="differenceDays > 0">
-              O protocolo <strong class="highlight-b">{{ protocolBLabel }}</strong> dura mais!
+            <h4 v-if="differenceDays > 0.01">
+              O protocolo <strong class="highlight-b">{{ freqState.protocolB.label || 'Protocolo B' }}</strong> dura mais!
             </h4>
-            <h4 v-else-if="differenceDays < 0">
-              O protocolo <strong class="highlight-a">{{ protocolALabel }}</strong> dura mais!
+            <h4 v-else-if="differenceDays < -0.01">
+              O protocolo <strong class="highlight-a">{{ freqState.protocolA.label || 'Protocolo A' }}</strong> dura mais!
             </h4>
             <h4 v-else>
               Ambos duram exatamente o mesmo tempo!
@@ -340,7 +553,7 @@
           </div>
         </div>
       </transition>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -352,26 +565,71 @@ import {
   ChevronDown as ChevronDownIcon,
   LineChart as LineChartIcon,
   Hourglass as HourglassIcon,
-  Database as DatabaseIcon,
   Sparkles as SparklesIcon,
-  AlertCircle as AlertCircleIcon,
-  CheckCircle as CheckCircleIcon,
+  AlertTriangle as AlertTriangleIcon,
+  CheckCircle as CheckCircleIcon
 } from 'lucide-vue-next'
 import { state } from '../state.js'
+import {
+  PEPTIDES,
+  ADDITIONAL_HORMONES,
+  DEFAULT_VIAL_SIZES,
+  DEFAULT_UI_VIAL_SIZES
+} from '../data/peptides.js'
+import {
+  parsePositiveNumber,
+  roundTo,
+  formatMetric,
+  formatDoseDisplay
+} from '../utils/calculations.js'
+import {
+  formatHalfLife,
+  computeSimulationHorizon,
+  simulateProtocolCurve,
+  calculateVialDuration,
+  formatDuration
+} from '../utils/pharmacokinetics.js'
 import StackingChart from './StackingChart.vue'
 
-// ───── Medication Database ─────
+const CUSTOM_MED_NAME = 'Personalizado (Modo Livre)'
+
+const freqState = state.frequency
+
 const medications = [
-  { name: 'Tirzepatida',             halfLife: 5.0,  category: 'Agonistas GLP-1 / GIP' },
-  { name: 'Semaglutida',             halfLife: 7.0,  category: 'Agonistas GLP-1 / GIP' },
-  { name: 'Retatrutida',             halfLife: 6.0,  category: 'Agonistas GLP-1 / GIP' },
-  { name: 'Testosterona Cipionato',  halfLife: 8.0,  category: 'Hormônios' },
-  { name: 'Testosterona Enantato',   halfLife: 4.5,  category: 'Hormônios' },
-  { name: 'Nandrolona Decanoato',    halfLife: 6.0,  category: 'Hormônios' },
-  { name: 'CJC-1295 + DAC',         halfLife: 6.0,  category: 'Secretagogos GH' },
+  ...PEPTIDES.map(p => ({
+    id: p.id,
+    name: p.name,
+    halfLife: p.halfLifeDays,
+    category: p.categoryLabel,
+    unit: p.unit || 'mg',
+    doseUnit: p.doseUnit || 'mg',
+    defaultFrequencyDays: p.defaultFrequencyDays || 7,
+    vials: p.vials || DEFAULT_VIAL_SIZES,
+    isCustom: false
+  })),
+  ...ADDITIONAL_HORMONES.map(h => ({
+    name: h.name,
+    halfLife: h.halfLifeDays,
+    category: h.categoryLabel,
+    unit: h.unit || 'mg',
+    doseUnit: 'mg',
+    defaultFrequencyDays: 7,
+    vials: DEFAULT_VIAL_SIZES,
+    isCustom: false
+  })),
+  {
+    id: 'custom',
+    name: CUSTOM_MED_NAME,
+    halfLife: 5.0,
+    category: 'Personalizado',
+    unit: 'mg',
+    doseUnit: 'mg',
+    defaultFrequencyDays: 7,
+    vials: DEFAULT_VIAL_SIZES,
+    isCustom: true
+  }
 ]
 
-// Group medications by category for the optgroup select
 const medicationGroups = computed(() => {
   const groups = {}
   for (const med of medications) {
@@ -381,341 +639,390 @@ const medicationGroups = computed(() => {
   return Object.entries(groups).map(([label, items]) => ({ label, items }))
 })
 
-const selectedMedication = ref('Tirzepatida')
+// Sync selected peptide from Calculator -> Frequency
+watch(
+  () => state.selectedPeptideId,
+  (pepId) => {
+    if (pepId === 'custom') {
+      freqState.selectedMedication = CUSTOM_MED_NAME
+      return
+    }
+    const match = PEPTIDES.find(p => p.id === pepId)
+    if (match) {
+      freqState.selectedMedication = match.name
+    }
+  },
+  { immediate: true }
+)
+
+// Pre-fill Protocol A dose from Calculator once if still empty
+watch(
+  () => state.doseAmount,
+  (val) => {
+    if (val && freqState.protocolA.dose === null) {
+      freqState.protocolA.dose = val
+    }
+  },
+  { immediate: true }
+)
+
+const selectedMedObj = computed(() => {
+  return medications.find(m => m.name === freqState.selectedMedication) || medications[0]
+})
+
+const isCustomMedication = computed(() => Boolean(selectedMedObj.value?.isCustom))
+
+const activeUnit = computed(() => {
+  if (isCustomMedication.value) {
+    return state.unit === 'UI' ? 'UI' : 'mg'
+  }
+  return selectedMedObj.value?.unit || 'mg'
+})
+
+const selectedMedVials = computed(() => {
+  if (activeUnit.value === 'UI') {
+    return DEFAULT_UI_VIAL_SIZES
+  }
+  return selectedMedObj.value?.vials || DEFAULT_VIAL_SIZES
+})
+
+const isVialSelected = (vialVal) => {
+  const current = parsePositiveNumber(state.vialAmount)
+  return current !== null && Math.abs(current - vialVal) < 1e-9
+}
 
 const currentHalfLife = computed(() => {
-  const med = medications.find(m => m.name === selectedMedication.value)
-  return med ? med.halfLife : 5
+  if (isCustomMedication.value) {
+    return parsePositiveNumber(freqState.customHalfLifeDays) || 5.0
+  }
+  return selectedMedObj.value?.halfLife || 5.0
 })
 
-// ───── Frequency Options ─────
-const frequencyOptions = [7, 3.5, 2]
-
-// ───── Protocol A ─────
-const protocolALabel = ref('Antigo')
-const protocolADose = ref(null)
-const protocolAFreq = ref(null)
-const protocolAFreqCustom = ref(null)
-const customAActive = ref(false)
-
-// Pre-fill dose from calculator if available
-watch(() => state.doseMg, (val) => {
-  if (val && protocolADose.value === null) {
-    protocolADose.value = val
-  }
-}, { immediate: true })
-
-function setFreqA(freq) {
-  protocolAFreq.value = freq
-  customAActive.value = false
-  protocolAFreqCustom.value = null
-}
-
-function onCustomAInput() {
-  if (protocolAFreqCustom.value > 0) {
-    protocolAFreq.value = protocolAFreqCustom.value
-    customAActive.value = true
+function handleMedicationChange() {
+  const med = selectedMedObj.value
+  if (!med) return
+  const prefUnit = med.doseUnit === 'mcg' ? 'mcg' : 'mg'
+  freqState.protocolA.doseUnit = prefUnit
+  freqState.protocolB.doseUnit = prefUnit
+  if (freqState.protocolA.freq === null) {
+    freqState.protocolA.freq = med.defaultFrequencyDays || 7
   }
 }
 
-const effectiveFreqA = computed(() => {
-  if (customAActive.value && protocolAFreqCustom.value > 0) return protocolAFreqCustom.value
-  return protocolAFreq.value
-})
+const doseInputARef = ref(null)
+const doseInputBRef = ref(null)
+const doseTextA = ref('')
+const doseTextB = ref('')
 
-// ───── Protocol B ─────
-const protocolBLabel = ref('Novo')
-const protocolBDose = ref(null)
-const protocolBFreq = ref(null)
-const protocolBFreqCustom = ref(null)
-const customBActive = ref(false)
-
-function setFreqB(freq) {
-  protocolBFreq.value = freq
-  customBActive.value = false
-  protocolBFreqCustom.value = null
+function formatProtocolDoseText(protocolKey) {
+  const d = parsePositiveNumber(freqState[protocolKey].dose)
+  if (d === null) return ''
+  if (activeUnit.value === 'mg' && freqState[protocolKey].doseUnit === 'mcg') {
+    return String(roundTo(d * 1000, 3))
+  }
+  return String(roundTo(d, 4))
 }
 
-function onCustomBInput() {
-  if (protocolBFreqCustom.value > 0) {
-    protocolBFreq.value = protocolBFreqCustom.value
-    customBActive.value = true
+function getDosePlaceholder(protocolKey, defaultMgPlaceholder) {
+  if (activeUnit.value === 'UI') {
+    return protocolKey === 'protocolA' ? '50' : '25'
+  }
+  if (freqState[protocolKey].doseUnit === 'mcg') {
+    return protocolKey === 'protocolA' ? '200' : '100'
+  }
+  return defaultMgPlaceholder
+}
+
+function setProtocolDoseUnit(protocolKey, nextUnit) {
+  if (activeUnit.value !== 'mg' || freqState[protocolKey].doseUnit === nextUnit) return
+  freqState[protocolKey].doseUnit = nextUnit
+  const formatted = formatProtocolDoseText(protocolKey)
+  if (protocolKey === 'protocolA') {
+    doseTextA.value = formatted
+  } else {
+    doseTextB.value = formatted
   }
 }
 
-const effectiveFreqB = computed(() => {
-  if (customBActive.value && protocolBFreqCustom.value > 0) return protocolBFreqCustom.value
-  return protocolBFreq.value
-})
+function onDoseInput(protocolKey, event) {
+  const raw = event.target.value
+  if (protocolKey === 'protocolA') {
+    doseTextA.value = raw
+  } else {
+    doseTextB.value = raw
+  }
 
-// ───── Pharmacokinetic Simulation Engine ─────
-function simulateProtocol(doseMg, intervalDays, halfLifeDays, totalDays = 35, resolution = 0.05) {
-  const points = []
-  const activeDoses = [] // { time: number, amount: number }
+  const parsed = parsePositiveNumber(raw)
+  if (parsed === null) {
+    freqState[protocolKey].dose = null
+    return
+  }
 
-  for (let t = 0; t <= totalDays; t += resolution) {
-    // Check if it's time for a new dose (at t=0, intervalDays, 2*intervalDays, etc.)
-    const doseIndex = Math.round(t / intervalDays)
-    const doseTime = doseIndex * intervalDays
+  freqState[protocolKey].dose =
+    activeUnit.value === 'mg' && freqState[protocolKey].doseUnit === 'mcg'
+      ? roundTo(parsed / 1000, 6)
+      : parsed
+}
 
-    // Add dose at the right time (within resolution tolerance)
-    if (Math.abs(t - doseTime) < resolution / 2 && !activeDoses.some(d => Math.abs(d.time - doseTime) < resolution / 2)) {
-      activeDoses.push({ time: doseTime, amount: doseMg })
+function onDoseBlur(protocolKey) {
+  const textRef = protocolKey === 'protocolA' ? doseTextA : doseTextB
+  if (parsePositiveNumber(textRef.value) === null) {
+    textRef.value = ''
+  }
+}
+
+function syncCalcDose(protocolKey) {
+  const parsed = parsePositiveNumber(state.doseAmount)
+  if (parsed === null) return
+  if (activeUnit.value === 'mg' && parsed < 0.1) {
+    freqState[protocolKey].doseUnit = 'mcg'
+  }
+  freqState[protocolKey].dose = parsed
+  const formatted = formatProtocolDoseText(protocolKey)
+  if (protocolKey === 'protocolA') {
+    doseTextA.value = formatted
+  } else {
+    doseTextB.value = formatted
+  }
+}
+
+watch(
+  [() => freqState.protocolA.dose, () => freqState.protocolA.doseUnit, activeUnit],
+  () => {
+    const isFocused =
+      typeof document !== 'undefined' && document.activeElement === doseInputARef.value
+    if (!isFocused) {
+      doseTextA.value = formatProtocolDoseText('protocolA')
     }
+  },
+  { immediate: true }
+)
 
-    // Calculate total load: sum of all doses with exponential decay
-    let totalLoad = 0
-    for (const dose of activeDoses) {
-      const elapsed = t - dose.time
-      if (elapsed >= 0) {
-        totalLoad += dose.amount * Math.pow(0.5, elapsed / halfLifeDays)
-      }
+watch(
+  [() => freqState.protocolB.dose, () => freqState.protocolB.doseUnit, activeUnit],
+  () => {
+    const isFocused =
+      typeof document !== 'undefined' && document.activeElement === doseInputBRef.value
+    if (!isFocused) {
+      doseTextB.value = formatProtocolDoseText('protocolB')
     }
+  },
+  { immediate: true }
+)
 
-    points.push({ time: Math.round(t * 1000) / 1000, load: totalLoad })
+const frequencyOptions = [
+  { value: 7, label: '7d' },
+  { value: 3.5, label: '3.5d' },
+  { value: 2, label: '2d' },
+  { value: 1, label: '1d' },
+  { value: 0.5, label: '12h' }
+]
+
+function setFreq(protocolKey, val) {
+  freqState[protocolKey].freq = val
+  freqState[protocolKey].customActive = false
+  freqState[protocolKey].freqCustom = null
+}
+
+function onCustomInput(protocolKey) {
+  const customVal = parsePositiveNumber(freqState[protocolKey].freqCustom)
+  if (customVal !== null) {
+    freqState[protocolKey].freq = customVal
+    freqState[protocolKey].customActive = true
   }
-
-  return points
 }
 
-function findSteadyStatePeakTrough(points, intervalDays) {
-  // Look at the last few cycles for steady-state values
-  const totalTime = points[points.length - 1]?.time || 35
-  const lookbackStart = Math.max(0, totalTime - intervalDays * 2.5)
-
-  const steadyPoints = points.filter(p => p.time >= lookbackStart)
-
-  const peak = Math.max(...steadyPoints.map(p => p.load))
-  const trough = Math.min(...steadyPoints.map(p => p.load))
-
-  return { peak, trough }
+function onCustomBlur(protocolKey) {
+  if (parsePositiveNumber(freqState[protocolKey].freqCustom) === null) {
+    freqState[protocolKey].customActive = false
+  }
 }
 
-// ───── Computed Chart Data ─────
-function parseNum(val) {
-  if (val === null || val === undefined || val === '') return NaN
-  const n = typeof val === 'number' ? val : parseFloat(val)
-  return isNaN(n) || n <= 0 ? NaN : n
+function getEffectiveFreq(protocol) {
+  if (protocol.customActive) {
+    return parsePositiveNumber(protocol.freqCustom)
+  }
+  return parsePositiveNumber(protocol.freq)
 }
+
+const effectiveFreqA = computed(() => getEffectiveFreq(freqState.protocolA))
+const effectiveFreqB = computed(() => getEffectiveFreq(freqState.protocolB))
+
+const showCalcSyncA = computed(() => {
+  const calcDose = parsePositiveNumber(state.doseAmount)
+  const doseA = parsePositiveNumber(freqState.protocolA.dose)
+  return calcDose !== null && (doseA === null || Math.abs(calcDose - doseA) > 1e-9)
+})
+
+const showCalcSyncB = computed(() => {
+  const calcDose = parsePositiveNumber(state.doseAmount)
+  const doseB = parsePositiveNumber(freqState.protocolB.dose)
+  return calcDose !== null && (doseB === null || Math.abs(calcDose - doseB) > 1e-9)
+})
+
+// Shared simulation horizon so Protocol A and Protocol B always align on X axis
+const sharedHorizonDays = computed(() => {
+  const intervals = [effectiveFreqA.value, effectiveFreqB.value].filter(Boolean)
+  return computeSimulationHorizon(currentHalfLife.value, intervals)
+})
 
 const chartDataA = computed(() => {
-  const dose = parseNum(protocolADose.value)
-  const freq = parseNum(effectiveFreqA.value)
-  if (isNaN(dose) || isNaN(freq)) return null
-
-  const points = simulateProtocol(dose, freq, currentHalfLife.value)
-  const { peak, trough } = findSteadyStatePeakTrough(points, freq)
-
+  const dose = parsePositiveNumber(freqState.protocolA.dose)
+  const freq = effectiveFreqA.value
+  if (dose === null || freq === null) return null
+  const curve = simulateProtocolCurve(dose, freq, currentHalfLife.value, sharedHorizonDays.value)
+  if (!curve) return null
   return {
-    label: protocolALabel.value || 'A',
-    points,
-    dose,
-    interval: freq,
-    peakSteady: peak,
-    troughSteady: trough,
+    label: freqState.protocolA.label || 'Protocolo A',
+    ...curve
   }
 })
 
 const chartDataB = computed(() => {
-  const dose = parseNum(protocolBDose.value)
-  const freq = parseNum(effectiveFreqB.value)
-  if (isNaN(dose) || isNaN(freq)) return null
-
-  const points = simulateProtocol(dose, freq, currentHalfLife.value)
-  const { peak, trough } = findSteadyStatePeakTrough(points, freq)
-
+  const dose = parsePositiveNumber(freqState.protocolB.dose)
+  const freq = effectiveFreqB.value
+  if (dose === null || freq === null) return null
+  const curve = simulateProtocolCurve(dose, freq, currentHalfLife.value, sharedHorizonDays.value)
+  if (!curve) return null
   return {
-    label: protocolBLabel.value || 'B',
-    points,
-    dose,
-    interval: freq,
-    peakSteady: peak,
-    troughSteady: trough,
+    label: freqState.protocolB.label || 'Protocolo B',
+    ...curve
   }
 })
 
-// Dynamic key to force StackingChart re-creation when protocols appear/disappear
-const chartKey = computed(() => {
-  const a = chartDataA.value ? `A${chartDataA.value.dose}-${chartDataA.value.interval}` : 'noA'
-  const b = chartDataB.value ? `B${chartDataB.value.dose}-${chartDataB.value.interval}` : 'noB'
-  return `chart-${a}-${b}`
-})
-
-// ───── Vial Duration Simulation ─────
+// Vial Duration Simulation
 function goToCalculator() {
   state.activeTab = 'calculator'
 }
 
-const isCalculatorConfigured = computed(() => {
-  const v = parseNum(state.vialMg)
-  const d = parseNum(state.diluentMl)
-  return !isNaN(v) && !isNaN(d)
-})
+const isVialConfigured = computed(() => parsePositiveNumber(state.vialAmount) !== null)
+const isDiluentConfigured = computed(() => parsePositiveNumber(state.diluentMl) !== null)
 
 const concentration = computed(() => {
-  const v = parseNum(state.vialMg)
-  const d = parseNum(state.diluentMl)
+  const v = parsePositiveNumber(state.vialAmount)
+  const d = parsePositiveNumber(state.diluentMl)
   return v && d ? v / d : 0
 })
 
-const hasProtocolA = computed(() => {
-  const dose = parseNum(protocolADose.value)
-  const freq = parseNum(effectiveFreqA.value)
-  return isCalculatorConfigured.value && !isNaN(dose) && !isNaN(freq)
+const vialDurationA = computed(() => {
+  if (!isVialConfigured.value) return null
+  return calculateVialDuration({
+    vialAmount: state.vialAmount,
+    dose: freqState.protocolA.dose,
+    intervalDays: effectiveFreqA.value
+  })
 })
 
-const hasProtocolB = computed(() => {
-  const dose = parseNum(protocolBDose.value)
-  const freq = parseNum(effectiveFreqB.value)
-  return isCalculatorConfigured.value && !isNaN(dose) && !isNaN(freq)
+const vialDurationB = computed(() => {
+  if (!isVialConfigured.value) return null
+  return calculateVialDuration({
+    vialAmount: state.vialAmount,
+    dose: freqState.protocolB.dose,
+    intervalDays: effectiveFreqB.value
+  })
 })
 
-const dosesPerVialA = computed(() => {
-  const v = parseNum(state.vialMg)
-  const d = parseNum(protocolADose.value)
-  return v && d ? v / d : 0
-})
-
-const durationDaysA = computed(() => {
-  const doses = dosesPerVialA.value
-  const f = parseNum(effectiveFreqA.value)
-  return doses && f ? doses * f : 0
-})
-
-const weeklyConsumptionA = computed(() => {
-  const d = parseNum(protocolADose.value)
-  const f = parseNum(effectiveFreqA.value)
-  return d && f ? (d / f) * 7 : 0
-})
-
-const dosesPerVialB = computed(() => {
-  const v = parseNum(state.vialMg)
-  const d = parseNum(protocolBDose.value)
-  return v && d ? v / d : 0
-})
-
-const durationDaysB = computed(() => {
-  const doses = dosesPerVialB.value
-  const f = parseNum(effectiveFreqB.value)
-  return doses && f ? doses * f : 0
-})
-
-const weeklyConsumptionB = computed(() => {
-  const d = parseNum(protocolBDose.value)
-  const f = parseNum(effectiveFreqB.value)
-  return d && f ? (d / f) * 7 : 0
+const canCompareVialDuration = computed(() => {
+  return Boolean(
+    vialDurationA.value &&
+      vialDurationB.value &&
+      !vialDurationA.value.exceedsVial &&
+      !vialDurationB.value.exceedsVial
+  )
 })
 
 const differenceDays = computed(() => {
-  if (!hasProtocolA.value || !hasProtocolB.value) return 0
-  return durationDaysB.value - durationDaysA.value
+  if (!canCompareVialDuration.value) return 0
+  return vialDurationB.value.durationDays - vialDurationA.value.durationDays
 })
 
 const comparisonClass = computed(() => {
-  if (differenceDays.value > 0) return 'better-b'
-  if (differenceDays.value < 0) return 'better-a'
+  if (differenceDays.value > 0.01) return 'winner-b'
+  if (differenceDays.value < -0.01) return 'winner-a'
   return 'equal'
 })
 
 const comparisonMessage = computed(() => {
+  if (!canCompareVialDuration.value) return ''
   const diff = Math.abs(differenceDays.value)
+  const labelA = freqState.protocolA.label || 'Protocolo A'
+  const labelB = freqState.protocolB.label || 'Protocolo B'
+
   if (diff < 0.01) {
-    return `Ambos os protocolos consumirão o mesmo frasco de ${state.vialMg}mg em exatamente ${Math.round(durationDaysA.value)} dias.`
+    return `Ambos os protocolos consomem o frasco de ${state.vialAmount}${activeUnit.value} em cerca de ${Math.round(vialDurationA.value.durationDays)} dias.`
   }
   const formattedDiff = formatDuration(diff)
   if (differenceDays.value > 0) {
-    return `O frasco durará ${formattedDiff} (${Math.round(diff)} dias) a mais com o protocolo ${protocolBLabel.value} em relação ao ${protocolALabel.value}.`
-  } else {
-    return `O frasco durará ${formattedDiff} (${Math.round(diff)} dias) a mais com o protocolo ${protocolALabel.value} em relação ao ${protocolBLabel.value}.`
+    return `O frasco dura ${formattedDiff} (${Math.round(diff)} dias) a mais no protocolo ${labelB} em comparação ao ${labelA}.`
   }
+  return `O frasco dura ${formattedDiff} (${Math.round(diff)} dias) a mais no protocolo ${labelA} em comparação ao ${labelB}.`
 })
-
-function formatDuration(days) {
-  if (isNaN(days) || days <= 0 || !isFinite(days)) return '-'
-  
-  const weeks = Math.floor(days / 7)
-  const remainingDays = Math.round((days % 7) * 10) / 10
-  
-  if (weeks === 0) {
-    return `${remainingDays} ${remainingDays === 1 ? 'dia' : 'dias'}`
-  } else if (remainingDays === 0) {
-    return `${weeks} ${weeks === 1 ? 'semana' : 'semanas'}`
-  } else {
-    return `${weeks} ${weeks === 1 ? 'semana' : 'semanas'} e ${remainingDays} ${remainingDays === 1 ? 'dia' : 'dias'}`
-  }
-}
-
-const formatNumber = (num, decimals = 1) => {
-  if (isNaN(num) || !isFinite(num)) return '0'
-  return Number(Math.round(num + 'e' + decimals) + 'e-' + decimals)
-}
 </script>
 
 <style scoped>
 .frequency-view {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.4rem;
 }
 
-/* Config Panel */
-.config-panel {
-  padding: 1.75rem;
+.config-panel,
+.chart-panel,
+.vial-simulation-panel {
+  padding: 1.5rem;
+}
+
+.config-panel,
+.vial-simulation-panel {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
 }
 
-.config-header {
+.title-wrap {
   display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.config-header .title-wrap {
-  display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.75rem;
 }
 
-.config-header .step-badge {
-  background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(59, 130, 246, 0.2));
-  padding: 0.5rem;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+.config-header h3,
+.sim-header h3 {
+  font-size: 1.12rem;
+}
+
+.config-subtitle,
+.sim-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  margin-top: 0.15rem;
+}
+
+.med-controls-grid {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--primary-hover);
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
-.config-header h3 {
-  font-size: 1.2rem;
-  color: var(--text-primary);
-}
-
-.config-subtitle {
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  margin-left: calc(16px + 1rem + 0.75rem);
-}
-
-/* Medication Selector */
 .config-section {
+  flex: 1 1 260px;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.45rem;
+}
+
+.custom-hl-section {
+  flex: 0 0 180px;
 }
 
 .config-label {
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 600;
+  letter-spacing: 0.05em;
+  font-weight: 700;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .select-wrap {
@@ -724,33 +1031,31 @@ const formatNumber = (num, decimals = 1) => {
 
 .custom-select {
   width: 100%;
-  padding: 0.75rem 1rem;
-  padding-right: 2.5rem;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid var(--surface-border);
+  padding: 0.68rem 2.5rem 0.68rem 0.9rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  font-size: 0.95rem;
-  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 500;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  transition: all 0.2s;
-  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .custom-select:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--border-strong);
 }
 
 .custom-select:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--surface-active);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .select-chevron {
   position: absolute;
-  right: 0.75rem;
+  right: 0.8rem;
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-muted);
@@ -765,22 +1070,21 @@ const formatNumber = (num, decimals = 1) => {
 }
 
 .protocol-card {
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid var(--surface-border);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 1.25rem;
+  padding: 1.15rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  transition: border-color 0.3s;
+  gap: 0.95rem;
 }
 
 .protocol-a {
-  border-top: 2px solid rgba(248, 113, 113, 0.5);
+  border-top: 2px solid var(--protocol-a);
 }
 
 .protocol-b {
-  border-top: 2px solid rgba(96, 165, 250, 0.5);
+  border-top: 2px solid var(--protocol-b);
 }
 
 .protocol-header {
@@ -790,47 +1094,43 @@ const formatNumber = (num, decimals = 1) => {
 }
 
 .protocol-dot {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
 .dot-a {
-  background: #f87171;
-  box-shadow: 0 0 6px rgba(248, 113, 113, 0.4);
+  background: var(--protocol-a);
 }
 
 .dot-b {
-  background: #60a5fa;
-  box-shadow: 0 0 6px rgba(96, 165, 250, 0.4);
+  background: var(--protocol-b);
 }
 
 .protocol-label-input {
   background: transparent;
   border: none;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+  border-bottom: 1px dashed var(--border-strong);
   color: var(--text-primary);
-  font-size: 1rem;
+  font-size: 0.98rem;
   font-weight: 700;
-  font-family: inherit;
-  outline: none;
-  padding: 0.2rem 0;
+  padding: 0.15rem 0;
   width: 100%;
-  transition: border-color 0.2s;
+  outline: none;
 }
 
 .protocol-label-input:focus {
-  border-bottom-color: var(--primary);
+  border-bottom-color: var(--accent);
 }
 
 .protocol-style {
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.05em;
+  font-weight: 700;
   flex-shrink: 0;
-  opacity: 0.7;
 }
 
 .protocol-field {
@@ -839,138 +1139,178 @@ const formatNumber = (num, decimals = 1) => {
   gap: 0.4rem;
 }
 
-.protocol-field label {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 600;
-}
-
-.field-input {
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-md);
-  padding: 0.6rem 0.75rem;
-  color: var(--text-primary);
-  font-size: 1rem;
-  font-family: inherit;
-  font-weight: 600;
-  outline: none;
-  transition: all 0.2s;
-  width: 100%;
-}
-
-.field-input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--surface-active);
-}
-
-/* Chrome, Safari, Edge, Opera */
-.field-input::-webkit-outer-spin-button,
-.field-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-/* Firefox */
-.field-input[type=number] {
-  -moz-appearance: textfield;
-}
-
-/* Frequency Buttons */
-.freq-buttons {
+.field-label-row {
   display: flex;
-  gap: 0.4rem;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
   flex-wrap: wrap;
 }
 
-.freq-btn {
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid var(--surface-border);
-  color: var(--text-secondary);
-  padding: 0.45rem 0.75rem;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  font-family: inherit;
-}
-
-.freq-btn:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-  transform: translateY(-1px);
-}
-
-.freq-btn.selected {
-  background: var(--primary);
-  border-color: var(--primary-hover);
-  color: #fff;
-  box-shadow: 0 2px 8px var(--primary-glow);
-  transform: translateY(-1px);
-}
-
-.freq-custom {
+.field-label-actions {
   display: flex;
   align-items: center;
-  border: 1px dashed var(--surface-border);
-  border-radius: 8px;
-  overflow: hidden;
-  transition: all 0.2s;
-  min-width: 50px;
+  gap: 0.45rem;
+  flex-wrap: wrap;
 }
 
-.freq-custom.active {
-  border-color: var(--primary);
-  border-style: solid;
-  box-shadow: 0 0 0 2px var(--surface-active);
+.dose-unit-toggle {
+  display: inline-flex;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
 }
 
-.freq-custom-input {
-  background: transparent;
+.unit-toggle-btn {
   border: none;
-  color: var(--text-primary);
-  font-size: 0.85rem;
-  font-weight: 600;
-  font-family: inherit;
-  outline: none;
-  padding: 0.45rem 0.5rem;
-  width: 50px;
-  text-align: center;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.16rem 0.45rem;
+  border-radius: calc(var(--radius-sm) - 2px);
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
+.unit-toggle-btn.active {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.protocol-field label {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+}
+
+.btn-sync-calc {
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.btn-sync-calc:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.field-input {
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.75rem;
+  color: var(--text-primary);
+  font-size: 0.98rem;
+  font-weight: 600;
+  width: 100%;
+  outline: none;
+}
+
+.field-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.field-input::-webkit-outer-spin-button,
+.field-input::-webkit-inner-spin-button,
 .freq-custom-input::-webkit-outer-spin-button,
 .freq-custom-input::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
 
-.freq-custom-input[type=number] {
+.field-input[type='number'],
+.freq-custom-input[type='number'] {
   -moz-appearance: textfield;
+}
+
+.freq-buttons {
+  display: flex;
+  gap: 0.38rem;
+  flex-wrap: wrap;
+}
+
+.freq-btn {
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  padding: 0.42rem 0.72rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.freq-btn:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+.freq-btn.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.freq-custom {
+  display: flex;
+  align-items: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+}
+
+.freq-custom.active {
+  border-color: var(--accent);
+  border-style: solid;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.freq-custom-input {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 600;
+  outline: none;
+  padding: 0.42rem 0.45rem;
+  width: 56px;
+  text-align: center;
 }
 
 /* Summary Stats */
 .summary-stats {
   display: flex;
-  gap: 1rem;
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid var(--surface-border);
+  gap: 1.25rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 1.25rem;
+  padding: 1.1rem 1.25rem;
 }
 
 .summary-col {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.42rem;
 }
 
 .summary-divider {
   width: 1px;
-  background: var(--surface-border);
+  background: var(--border-subtle);
   align-self: stretch;
 }
 
@@ -978,35 +1318,41 @@ const formatNumber = (num, decimals = 1) => {
   font-size: 0.8rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.25rem;
+  gap: 0.45rem;
+  margin-bottom: 0.2rem;
 }
 
 .summary-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.85rem;
+  font-size: 0.84rem;
 }
 
-.summary-row span {
-  color: var(--text-muted);
+.summary-row > span:first-child {
+  color: var(--text-secondary);
 }
 
 .summary-row strong {
   color: var(--text-primary);
-  font-feature-settings: "tnum";
-  font-variant-numeric: tabular-nums;
+}
+
+.washout-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--emerald);
+  background: var(--emerald-soft);
+  padding: 0.14rem 0.5rem;
+  border-radius: var(--radius-full);
 }
 
 /* Chart Panel */
 .chart-panel {
-  padding: 1.5rem;
-  min-height: 420px;
+  min-height: 360px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1016,34 +1362,397 @@ const formatNumber = (num, decimals = 1) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   text-align: center;
   color: var(--text-muted);
-  gap: 1.5rem;
-  padding: 2rem;
+  gap: 1rem;
+  padding: 2rem 1rem;
 }
 
-.chart-placeholder .placeholder-icon-wrapper {
-  background: rgba(30, 41, 59, 0.4);
-  padding: 1.5rem;
+.placeholder-icon-wrapper {
+  background: var(--surface-2);
+  padding: 1.25rem;
   border-radius: 50%;
-  border: 1px dashed var(--surface-border);
+  border: 1px dashed var(--border-strong);
 }
 
-.chart-placeholder .placeholder-icon {
-  opacity: 0.4;
-  color: var(--primary);
+.placeholder-icon {
+  color: var(--accent);
+  opacity: 0.7;
 }
 
 .chart-placeholder p {
-  max-width: 300px;
-  line-height: 1.5;
-  font-size: 0.95rem;
+  max-width: 320px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
 }
 
-/* Responsive */
+/* Vial Simulation Panel */
+.sim-vial-info-row {
+  background: var(--surface-2);
+  padding: 0.95rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.quick-vial-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.quick-vial-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.quick-vial-hint {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.quick-vial-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.quick-vial-btn {
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  padding: 0.36rem 0.7rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.quick-vial-btn:hover {
+  background: var(--surface-3);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.quick-vial-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.quick-vial-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--surface-1);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.2rem 0.55rem;
+}
+
+.quick-vial-input {
+  width: 58px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  outline: none;
+}
+
+.quick-vial-custom span {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.quick-vial-input::-webkit-outer-spin-button,
+.quick-vial-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.quick-vial-input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+.vial-info-pill-container {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.vial-info-pill {
+  flex: 1 1 150px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.pill-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.pill-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pill-hint {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.vial-info-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--amber);
+  font-size: 0.88rem;
+}
+
+.warning-icon {
+  flex-shrink: 0;
+}
+
+.link-tab {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent-strong);
+  text-decoration: underline;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: inherit;
+}
+
+.sim-results-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.sim-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sim-card.disabled {
+  opacity: 0.65;
+  border-style: dashed;
+}
+
+.sim-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 0.65rem;
+}
+
+.sim-card-header .protocol-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 700;
+  font-size: 0.96rem;
+}
+
+.protocol-summary-badge {
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  padding: 0.18rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.sim-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+}
+
+.sim-vial-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.main-duration {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.9rem;
+  background: var(--surface-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.duration-value {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.protocol-a-card .duration-value {
+  color: var(--protocol-a);
+}
+
+.protocol-b-card .duration-value {
+  color: var(--protocol-b);
+}
+
+.duration-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  margin-top: 0.2rem;
+}
+
+.sim-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.sim-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.84rem;
+}
+
+.sim-detail-row span {
+  color: var(--text-secondary);
+}
+
+.sim-detail-row strong {
+  color: var(--text-primary);
+}
+
+.leftover-note {
+  font-weight: 500;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.sim-card-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 110px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 0.5rem;
+}
+
+/* Comparison Banner */
+.sim-comparison-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1rem 1.15rem;
+  border-radius: var(--radius-md);
+  border: 1px solid;
+}
+
+.sim-comparison-banner.winner-b {
+  background: var(--protocol-b-soft);
+  border-color: color-mix(in srgb, var(--protocol-b) 35%, transparent);
+}
+
+.sim-comparison-banner.winner-b .comparison-icon-wrap {
+  color: var(--protocol-b);
+  background: var(--surface-1);
+}
+
+.sim-comparison-banner.winner-a {
+  background: var(--protocol-a-soft);
+  border-color: color-mix(in srgb, var(--protocol-a) 35%, transparent);
+}
+
+.sim-comparison-banner.winner-a .comparison-icon-wrap {
+  color: var(--protocol-a);
+  background: var(--surface-1);
+}
+
+.sim-comparison-banner.equal {
+  background: var(--emerald-soft);
+  border-color: color-mix(in srgb, var(--emerald) 35%, transparent);
+}
+
+.sim-comparison-banner.equal .comparison-icon-wrap {
+  color: var(--emerald);
+  background: var(--surface-1);
+}
+
+.comparison-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.comparison-text h4 {
+  font-size: 0.94rem;
+}
+
+.comparison-text p {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  margin-top: 0.2rem;
+}
+
+.highlight-a {
+  color: var(--protocol-a);
+}
+
+.highlight-b {
+  color: var(--protocol-b);
+}
+
 @media (max-width: 768px) {
-  .protocols-grid {
+  .protocols-grid,
+  .sim-results-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1056,340 +1765,16 @@ const formatNumber = (num, decimals = 1) => {
     height: 1px;
   }
 
-  .config-subtitle {
-    margin-left: 0;
+  .custom-hl-section {
+    flex: 1 1 100%;
   }
 }
 
 @media (max-width: 640px) {
-  .config-panel {
-    padding: 1.25rem;
-  }
-
-  .chart-panel {
-    padding: 1rem;
-  }
-}
-
-/* Vial Simulation Panel */
-.vial-simulation-panel {
-  padding: 1.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  margin-top: 0.5rem;
-}
-
-.sim-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.sim-header .title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.sim-vial-info-row {
-  background: rgba(15, 23, 42, 0.2);
-  padding: 1.25rem;
-  border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.03);
-}
-
-.vial-info-pill-container {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.vial-info-pill {
-  flex: 1;
-  min-width: 140px;
-  background: rgba(15, 23, 42, 0.5);
-  border: 1px solid var(--surface-border);
-  padding: 0.6rem 1rem;
-  border-radius: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  transition: border-color 0.2s;
-}
-
-.vial-info-pill:hover {
-  border-color: rgba(255, 255, 255, 0.15);
-}
-
-.vial-info-pill .pill-label {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 600;
-}
-
-.vial-info-pill .pill-value {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.vial-info-warning {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  color: #fca5a5;
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
-.vial-info-warning .warning-icon {
-  color: #f87171;
-  flex-shrink: 0;
-}
-
-.link-tab {
-  color: var(--primary-hover);
-  text-decoration: underline;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-.link-tab:hover {
-  color: var(--text-primary);
-}
-.sim-header h3 {
-  font-size: 1.2rem;
-  color: var(--text-primary);
-}
-
-.sim-subtitle {
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  margin-left: calc(16px + 1rem + 0.75rem);
-}
-
-
-/* Results grid */
-.sim-results-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-}
-
-.sim-card {
-  background: rgba(15, 23, 42, 0.4);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--radius-md);
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  transition: opacity 0.3s, transform 0.3s;
-}
-
-.sim-card.disabled {
-  opacity: 0.5;
-  background: rgba(15, 23, 42, 0.2);
-  border-style: dashed;
-}
-
-.sim-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  padding-bottom: 0.75rem;
-}
-
-.sim-card-header .protocol-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 700;
-  font-size: 1rem;
-}
-
-.protocol-summary-badge {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 0.2rem 0.5rem;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.sim-card-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-.main-duration {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: rgba(15, 23, 42, 0.5);
-  border-radius: var(--radius-md);
-  text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.02);
-}
-
-.duration-value {
-  font-size: 1.6rem;
-  font-weight: 800;
-  color: #fff;
-  background: linear-gradient(135deg, #fff 30%, var(--text-secondary) 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin-bottom: 0.25rem;
-}
-
-.protocol-a-card .duration-value {
-  background: linear-gradient(135deg, #fff 40%, #fca5a5 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.protocol-b-card .duration-value {
-  background: linear-gradient(135deg, #fff 40%, #93c5fd 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.duration-label {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 600;
-}
-
-.sim-details {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.sim-detail-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.85rem;
-}
-
-.sim-detail-row span {
-  color: var(--text-muted);
-}
-
-.sim-detail-row strong {
-  color: var(--text-primary);
-  font-feature-settings: "tnum";
-}
-
-.sim-card-placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 120px;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  padding: 1rem;
-}
-
-/* Comparison Banner */
-.sim-comparison-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-  padding: 1.25rem;
-  border-radius: var(--radius-md);
-  border: 1px solid;
-  transition: all 0.3s;
-}
-
-.sim-comparison-banner.better-b {
-  background: rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.2);
-}
-
-.sim-comparison-banner.better-b .comparison-icon-wrap {
-  color: #34d399;
-  background: rgba(16, 185, 129, 0.15);
-}
-
-.sim-comparison-banner.better-a {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.2);
-}
-
-.sim-comparison-banner.better-a .comparison-icon-wrap {
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.15);
-}
-
-.sim-comparison-banner.equal {
-  background: rgba(59, 130, 246, 0.08);
-  border-color: rgba(59, 130, 246, 0.2);
-}
-
-.sim-comparison-banner.equal .comparison-icon-wrap {
-  color: #60a5fa;
-  background: rgba(59, 130, 246, 0.15);
-}
-
-.comparison-icon-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.5rem;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.comparison-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.comparison-text h4 {
-  font-size: 0.95rem;
-  color: var(--text-primary);
-}
-
-.comparison-text p {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-
-.highlight-a {
-  color: #f87171;
-}
-
-.highlight-b {
-  color: #60a5fa;
-}
-
-/* Responsive adjustment for sim grid */
-@media (max-width: 768px) {
-  .sim-results-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .sim-subtitle {
-    margin-left: 0;
+  .config-panel,
+  .chart-panel,
+  .vial-simulation-panel {
+    padding: 1.1rem;
   }
 }
 </style>
